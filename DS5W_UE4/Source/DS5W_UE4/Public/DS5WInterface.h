@@ -15,6 +15,11 @@
 
 #include "GamepadMotion.hpp"
 
+#include "imufilter/RTMath.h"
+#include "imufilter/RTIMULibDefs.h"
+#include "imufilter/RTFusionKalman4.h"
+#include "imufilter/RTIMUSettings.h"
+
 /** Max number of controllers. */
 #define MAX_NUM_DS5W_CONTROLLERS 4
 
@@ -252,6 +257,9 @@ private:
 	/** Motion states */
 	GamepadMotion MotionStates[MAX_NUM_DS5W_CONTROLLERS];
 
+	RTIMUSettings KalmanSettings;
+	RTFusionKalman4 KalmanFilters[MAX_NUM_DS5W_CONTROLLERS];
+
 	/** Delay before sending a repeat message after a button was first pressed */
 	float InitialButtonRepeatDelay;
 
@@ -292,5 +300,24 @@ private:
 		Motion.GetProcessedAcceleration(Controller.Acceleration.X, Controller.Acceleration.Y, Controller.Acceleration.Z);
 		Motion.GetOrientation(Controller.Orientation.W, Controller.Orientation.X, Controller.Orientation.Y, Controller.Orientation.Z);
 		Motion.GetGravity(Controller.Gravity.X, Controller.Gravity.Y, Controller.Gravity.Z);
+
+		UE_LOG(LogTemp, Warning, TEXT("GamepadMotion quaternion: (w: %f, x: %f, y: %f, z: %f)"), Controller.Orientation.W, Controller.Orientation.X, Controller.Orientation.Y, Controller.Orientation.Z);
+	}
+
+	void push_samples_to_kalman(RTFusionKalman4& KalmanFilter, const FControllerState& Controller) {
+		RTIMU_DATA data;
+		data.delta_time = Controller.DeltaTime;
+		data.accelValid = true;
+		data.accel = RTVector3(Controller.Gyroscope.X, Controller.Gyroscope.Y, Controller.Gyroscope.Z);
+		data.gyroValid = true;
+		data.gyro = RTVector3(Controller.Accelerometer.X, Controller.Accelerometer.Y, Controller.Accelerometer.Z);
+
+		data.compassValid = false;
+		data.fusionPoseValid = false;
+		data.fusionQPoseValid = false;
+
+		KalmanFilter.newIMUData(data, &KalmanSettings);
+
+		UE_LOG(LogTemp, Warning, TEXT("Kalman quaternion: (w: %f, x: %f, y: %f, z: %f)"), data.fusionQPose.scalar(), data.fusionQPose.x(), data.fusionQPose.y(), data.fusionQPose.z());
 	}
 };

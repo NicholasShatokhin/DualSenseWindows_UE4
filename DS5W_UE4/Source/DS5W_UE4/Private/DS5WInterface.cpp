@@ -117,6 +117,8 @@ FDS5WInterface::FDS5WInterface(const TSharedRef<FGenericApplicationMessageHandle
 	con._internal.deviceHandle = nullptr;
 	con._internal.devicePath[0] = 0x0;
 
+	KalmanSettings.m_compassAdjDeclination = 0.f;
+
 	for (int32 ControllerIndex = 0; ControllerIndex < MAX_NUM_DS5W_CONTROLLERS; ++ControllerIndex)
 	{
 		FControllerState& ControllerState = ControllerStates[ControllerIndex];
@@ -130,6 +132,14 @@ FDS5WInterface::FDS5WInterface(const TSharedRef<FGenericApplicationMessageHandle
 		ControllerState.LastMeasurementTime = FPlatformTime::Seconds();
 
 		ControllerState.GyroscopeAxises.Init(ControllerState.ControllerId);
+
+		RTFusionKalman4& Filter = KalmanFilters[ControllerIndex];
+
+		Filter.setCompassEnable(false);
+		Filter.setAccelEnable(true);
+		Filter.setGyroEnable(true);
+
+		Filter.setDebugEnable(true);
 	}
 
 	bIsGamepadAttached = true;
@@ -274,6 +284,7 @@ void FDS5WInterface::SendControllerEvents()
 
 		FControllerState& ControllerState = ControllerStates[ControllerIndex];
 		GamepadMotion& MotionState = MotionStates[ControllerIndex];
+		RTFusionKalman4& KalmanFilter = KalmanFilters[ControllerIndex];
 
 		const bool bWasConnected = bWereConnected[ControllerIndex];
 
@@ -378,6 +389,8 @@ void FDS5WInterface::SendControllerEvents()
 
 			ControllerState.Accelerometer = FVector(Gamepad.imuState.accelX, Gamepad.imuState.accelY, Gamepad.imuState.accelZ);
 			ControllerState.Gyroscope = FVector(Gamepad.imuState.gyroX, Gamepad.imuState.gyroY, Gamepad.imuState.gyroZ);
+
+			push_samples_to_kalman(KalmanFilter, ControllerState);
 
 			push_sensor_samples(MotionState, ControllerState);
 			get_calibrated_gyro(ControllerState, MotionState);
